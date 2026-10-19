@@ -1,0 +1,15 @@
+<title>Site Pro · سايت برو</title>
+<meta name="description" content="Site Pro - construction site management">
+<style>
+  :root { --bg: #f6f8fc; --fg: #12284c; --muted: #5b6b86; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0f1a2e; --fg: #e8eefb; --muted: #9fb0cc; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #0f1a2e; --fg: #e8eefb; --muted: #9fb0cc; color-scheme: dark }
+  html, body { height: 100%; }
+  body { background: var(--bg); color: var(--fg); overflow: hidden; }
+  #boot { position: fixed; inset: 0; display: grid; place-content: center; gap: 10px; text-align: center; font-family: system-ui, sans-serif; }
+  #boot b { font-size: 28px; letter-spacing: .02em; }
+  #boot span { color: var(--muted); font-size: 14px; }
+</style>
+<div id="boot" dir="rtl"><b>Site Pro</b><span>جاري تحميل التطبيق...</span></div>
+<script>window.dartPdfJsBaseUrl = new URL("pdfjs/", document.baseURI).href;</script>
+<script src="flutter_bootstrap.js" async></script>
