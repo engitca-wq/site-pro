@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Site Pro Viewer</title>
+<style>
+@font-face { font-family: Tajawal; src: url(Tajawal-Regular.ttf); font-weight: 400; }
+@font-face { font-family: Tajawal; src: url(Tajawal-Bold.ttf); font-weight: 700; }
+:root {
+  --bar: #ffffff; --ink: #1d2b3a; --muted: #6b7785; --line: #dfe4ea; --accent: #1f5fa8; --accent-soft: #e4eefa;
+  --live: #ffb000; --danger: #d13b3b;
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; overflow: hidden; font-family: Tajawal, "Segoe UI", Tahoma, sans-serif; color: var(--ink); background: #1d2127; }
+#stage { position: absolute; inset: 0 0 var(--dock, 0px); touch-action: none; }
+.stage { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.tag3d { position: absolute; transform: translate(-50%, -130%); background: rgba(20,24,30,.85); padding: 2px 8px; border-radius: 4px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.pin3d { position: absolute; width: 24px; height: 32px; transform: translate(-50%, -100%); pointer-events: auto; cursor: pointer; }
+.pin3d::before { content: ""; position: absolute; inset: 0 0 8px; background: #e5484d; border: 2px solid #fff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }
+.pin3d span { position: absolute; inset: 3px 0 0; text-align: center; color: #fff; font: 700 11px sans-serif; }
+
+:root { --dk: #23272e; --dk2: #2e333b; --dk3: #3a4049; --tx: #e8ebef; --tx2: #9aa3ad; }
+#top { position: absolute; top: calc(10px + env(safe-area-inset-top)); left: 10px; display: flex; gap: 2px; background: var(--dk); border-radius: 12px; padding: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.35); z-index: 3; }
+.topbtn { width: 40px; height: 40px; border: 0; border-radius: 9px; background: transparent; color: var(--tx); display: grid; place-items: center; cursor: pointer; }
+.topbtn:active, .topbtn.on { background: var(--dk3); }
+.topbtn:disabled { opacity: .35; }
+#dock { position: absolute; left: 0; right: 0; bottom: 0; padding-bottom: env(safe-area-inset-bottom); background: var(--dk); box-shadow: 0 -4px 16px rgba(0,0,0,.3); z-index: 3; }
+#tools { display: flex; gap: 2px; overflow-x: auto; padding: 6px 6px 4px; border-bottom: 1px solid var(--dk3); scrollbar-width: none; }
+#cats { display: flex; gap: 2px; overflow-x: auto; padding: 4px 6px 6px; scrollbar-width: none; }
+#tools::-webkit-scrollbar, #cats::-webkit-scrollbar { display: none; }
+.cat, .tool { flex: none; border: 0; background: transparent; color: var(--tx2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 64px; height: 56px; padding: 4px 8px; border-radius: 10px; font: 600 12px Tajawal, sans-serif; cursor: pointer; }
+.cat.on { color: #fff; background: var(--dk3); }
+.tool { color: var(--tx); }
+.tool.on { background: #ff9f0a; color: #1d2127; }
+.tool.back { min-width: 40px; color: var(--tx2); }
+.cat span, .tool span { white-space: nowrap; }
+#hint { position: absolute; top: calc(62px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 24px); background: rgba(20,24,30,.85); color: #fff; padding: 6px 12px; border-radius: 999px; font-size: 13px; text-align: center; z-index: 2; pointer-events: none; }
+#pending, #selbar { position: absolute; bottom: calc(var(--dock, 0px) + 12px); left: 50%; transform: translateX(-50%); background: var(--dk); color: var(--tx); border-radius: 12px; padding: 8px 10px; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 18px rgba(0,0,0,.35); white-space: nowrap; z-index: 3; max-width: calc(100% - 20px); }
+#pvalue { font-weight: 700; font-size: 17px; color: #ffb340; min-width: 50px; }
+#pcount, #seltext { color: var(--tx2); font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+#pending button, #selbar button { border: 0; border-radius: 9px; padding: 7px 12px; font: 700 13px Tajawal, sans-serif; cursor: pointer; background: var(--dk3); color: var(--tx); }
+#pending #psave { background: #ff9f0a; color: #1d2127; }
+#selbar #seldel { background: var(--danger); color: #fff; }
+#pending button:disabled { opacity: .4; }
+#panel { position: absolute; top: calc(10px + env(safe-area-inset-top)); right: 10px; width: min(340px, calc(100% - 20px)); max-height: calc(100% - var(--dock, 0px) - 20px); background: var(--bar); border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.3); display: flex; flex-direction: column; overflow: hidden; z-index: 4; }
+#panel header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--line); font-weight: 700; }
+#pclose-panel { border: 0; background: none; font-size: 22px; line-height: 1; cursor: pointer; color: var(--muted); }
+#pbody { overflow: auto; padding: 8px 14px 14px; font-size: 14px; }
+#pbody h4 { margin: 12px 0 4px; font-size: 13px; color: var(--muted); }
+.check { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f0f2f5; cursor: pointer; }
+.check span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: auto; }
+.check small { color: var(--muted); }
+.check i, .mark i { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(0,0,0,.2); flex: none; }
+.row-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.row-actions button, .seg button { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 6px 10px; font: 600 13px Tajawal, sans-serif; cursor: pointer; color: var(--ink); }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+.seg button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+input[type=range] { width: 100%; }
+.props { width: 100%; border-collapse: collapse; font-size: 13px; }
+.props th { text-align: right; color: var(--muted); font-weight: 600; padding: 4px 0 4px 8px; vertical-align: top; width: 40%; }
+.props td { padding: 4px 0; word-break: break-word; }
+.mark { display: flex; align-items: center; gap: 8px; width: 100%; text-align: right; border: 0; border-bottom: 1px solid #f0f2f5; background: none; padding: 8px 4px; font: 14px Tajawal, sans-serif; cursor: pointer; color: var(--ink); }
+.mark span { flex: 1; overflow: hidden; text-overflow: ellipsis; direction: auto; }
+.mark small { color: var(--muted); }
+.mark.sel { background: var(--accent-soft); border-radius: 6px; }
+.totals { display: flex; flex-wrap: wrap; gap: 6px 14px; background: var(--accent-soft); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; font-size: 13px; }
+.muted { color: var(--muted); font-size: 13px; }
+.palette { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin: 8px 0 12px; }
+.palette button { aspect-ratio: 1; border: 1px solid rgba(0,0,0,.2); border-radius: 6px; cursor: pointer; }
+.palette button.on { outline: 3px solid var(--accent); outline-offset: 1px; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); margin: 6px 0; }
+.field input, #q, #ask-input { font: 15px Tajawal, sans-serif; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; width: 100%; color: var(--ink); }
+#q { margin: 4px 0 8px; }
+#toast { position: absolute; top: calc(104px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); background: #fff; color: var(--ink); padding: 8px 14px; border-radius: 10px; font-size: 14px; font-weight: 600; box-shadow: 0 4px 18px rgba(0,0,0,.3); z-index: 6; max-width: calc(100% - 24px); }
+#ask { position: absolute; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; z-index: 7; padding: 16px; }
+#ask form { background: #fff; border-radius: 14px; padding: 16px; width: min(380px, 100%); display: flex; flex-direction: column; gap: 10px; }
+#ask-title { font-weight: 700; }
+#ask .btns { display: flex; gap: 8px; justify-content: flex-start; }
+#ask .btns button { border: 0; border-radius: 9px; padding: 8px 16px; font: 700 14px Tajawal, sans-serif; cursor: pointer; background: #eef1f4; color: var(--ink); }
+#ask #ask-ok { background: var(--accent); color: #fff; }
+#loading { position: absolute; inset: 0; display: grid; place-items: center; background: #1d2127; color: #fff; }
+#loading div { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+#loading i { width: 34px; height: 34px; border: 3px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { #loading i { animation-duration: 3s; } }
+#error { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: #fff; background: #1d2127; font-size: 16px; line-height: 1.7; }
+@media (max-width: 520px) {
+  #panel { top: auto; bottom: calc(var(--dock, 0px) + 8px); right: 8px; left: 8px; width: auto; max-height: 55%; }
+  .cat, .tool { min-width: 58px; }
+}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="top"></div>
+<div id="hint" hidden></div>
+<div id="toast" hidden></div>
+<div id="pending" hidden>
+  <span id="pvalue"></span><span id="pcount"></span>
+  <button id="pundo">رجوع نقطة</button><button id="pclose" hidden>اقفل الشكل</button><button id="pcancel">إلغاء</button><button id="psave">حفظ</button>
+</div>
+<div id="selbar" hidden><span id="seltext"></span><button id="seldel">مسح</button></div>
+<div id="dock"><div id="tools" hidden></div><div id="cats"></div></div>
+<section id="panel" hidden><header><span id="ptitle"></span><button id="pclose-panel" aria-label="قفل">×</button></header><div id="pbody"></div></section>
+<div id="ask" hidden><form onsubmit="return false"><label id="ask-title" for="ask-input"></label><input id="ask-input" autocomplete="off"><div class="btns"><button id="ask-ok" type="button">تمام</button><button id="ask-cancel" type="button">إلغاء</button></div></form></div>
+<div id="loading"><div><i></i><span>بيفتح الملف...</span></div></div>
+<div id="error" hidden></div>
+<script type="module" src="viewer.js"></script>
+</body>
+</html>
