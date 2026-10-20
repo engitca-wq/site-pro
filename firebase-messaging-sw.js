@@ -3,11 +3,11 @@
 // The config is the Firebase web app's public settings (see
 // lib/core/firebase_config.dart); empty until Firebase is set up.
 const firebaseConfig = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  messagingSenderId: '',
-  appId: '',
+  apiKey: 'AIzaSyD3TjtQyJqdeQJnecCA8vq-yfrQB_kJPcY',
+  authDomain: 'site-pro-d666b.firebaseapp.com',
+  projectId: 'site-pro-d666b',
+  messagingSenderId: '828563724914',
+  appId: '1:828563724914:web:d6aa5016f904d9928380eb',
 };
 
 if (firebaseConfig.appId) {
