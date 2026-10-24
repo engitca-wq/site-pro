@@ -376,6 +376,8 @@ function buildText(rec, e, type) {
     rot: mapAngle(e.ocs, rot),
     att: aligned ? textAtt(ha, va) : 7,
     wf,
+    st: rec.str(7, "STANDARD").toUpperCase(),
+    obl: rec.idx(51) >= 0 ? rec.num(51) * D2R : undefined,
   };
   if (type === "ATTRIB" && rec.int(70) & 1) out.hidden = true;
   return out;
@@ -787,6 +789,7 @@ function entity(rec, ctx) {
         att: rec.int(71, 1) || 1,
         w: rec.num(41),
         ls: rec.num(44, 1) || 1,
+        st: rec.str(7, "STANDARD").toUpperCase(),
       };
     }
     case "INSERT":
@@ -1113,6 +1116,15 @@ function readTables(r, doc) {
       const dashes = rec.all(49).map(Number);
       doc.ltypes[name] =
         dashes.length >= 2 && dashes.some((d) => d < 0) ? dashes : null;
+    } else if (type === "STYLE") {
+      // Text styles: font file (SHX or TrueType), big font, width, slant.
+      if (!(rec.int(70) & 1))
+        doc.styles[unescapeDxf(rec.str(2, "")).toUpperCase()] = {
+          font: rec.str(3, "").trim(),
+          big: rec.str(4, "").trim(),
+          wf: rec.num(41, 1) || 1,
+          obl: rec.num(50) * D2R,
+        };
     } else if (type === "BLOCK_RECORD") {
       doc.blockRecords[rec.str(5, "").trim()] = unescapeDxf(rec.str(2, ""));
     }
@@ -1235,6 +1247,7 @@ function parseWith(bytes, encoding, fatal, onProgress) {
     header: {},
     layers: {},
     ltypes: {},
+    styles: {},
     blockRecords: {},
     blocks: {},
     entities: [],
@@ -1391,6 +1404,7 @@ function finish(doc, ctx) {
     ltscale: +h.$LTSCALE || 1,
     layers: doc.layers,
     ltypes: doc.ltypes,
+    styles: doc.styles,
     blocks,
     entities: model.filter((e) => e.type !== "VIEWPORT"),
     layouts,

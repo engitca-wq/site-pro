@@ -3,6 +3,7 @@
 //   parse(bytes, kind, cb) DWG/DXF -> drawing model (in a worker when possible)
 //   flatten(doc, list)     drawing model -> per-layer polylines/fills/texts in world units
 import { aci, bspline } from "./dxf.js";
+import { parseShx, shxLine } from "./shx.js";
 
 export { aci };
 
@@ -327,6 +328,99 @@ function hatchSegments(loops, patterns, cap) {
 
 const PCT = { c: "Ø", d: "°", p: "±" };
 
+/** Normalized font file name: "C:\\X\\Romans" -> "romans.shx". */
+export function fontKey(f) {
+  if (!f) return "";
+  let n = String(f).replace(/\\/g, "/").split("/").pop().trim().toLowerCase();
+  if (!n) return "";
+  if (!/\.[a-z0-9]{3}$/.test(n)) n += ".shx";
+  return n;
+}
+
+// AutoCAD's TrueType copies of its SHX fonts: draw them with the SHX font itself.
+const TTF_SHX = { "romans__.ttf": "romans.shx", "romand__.ttf": "romand.shx", "romanc__.ttf": "romanc.shx", "romant__.ttf": "romant.shx", "txt_____.ttf": "txt.shx", "isocp___.ttf": "isocp.shx", "isoct___.ttf": "isoct.shx", "simplex_.ttf": "simplex.shx", "complex_.ttf": "complex.shx", "italic__.ttf": "italic.shx", "monos___.ttf": "monotxt.shx", "scripts_.ttf": "scripts.shx" };
+// TrueType font files -> CSS font families the browser has (or close ones).
+const TTF_CSS = [
+  [/^arialn/, '"Arial Narrow", Arial'], [/^arial/, "Arial"], [/^verdana/, "Verdana"], [/^tahoma/, "Tahoma"],
+  [/^times/, '"Times New Roman", serif'], [/^gothic|^century/, '"Century Gothic", Arial'], [/^trad/, '"Traditional Arabic", "Simplified Arabic"'],
+  [/^calibri/, "Calibri, Arial"], [/^cour/, '"Courier New", monospace'], [/^swiss|^sans|^helv|^l_10646|^lsans/, "Arial"], [/^segoe/, '"Segoe UI"'],
+];
+/** CSS family and weight for a TrueType text style. */
+function ttfFace(doc, key) {
+  const base = key.replace(/\.[a-z]+$/, "");
+  let fam = doc.ttf?.[key];
+  if (!fam) for (const [re, f] of TTF_CSS) if (re.test(base)) { fam = f; break; }
+  const bold = /bd|bold|black|^swissb|^swisscb|^sasb/.test(base) ? "700 " : "";
+  return { ff: (fam ? fam + ", " : "") + 'Tajawal, "Segoe UI", Tahoma, sans-serif', fw: bold };
+}
+
+/** The SHX font (and big font) a text entity is drawn with, or null for TrueType. */
+function textFont(doc, n, raw) {
+  if (!doc.shx) return null;
+  const sty = doc.styles?.[n.st || "STANDARD"] ?? doc.styles?.STANDARD;
+  let fk = fontKey(sty?.font),
+    bk = fontKey(sty?.big);
+  // MTEXT can switch font inline: \Fromans.shx; (SHX) or \fArial|b0; (TrueType)
+  const m = n.type === "MTEXT" && /\\([Ff])([^;|]+)/.exec(String(raw));
+  if (m) {
+    if (m[1] === "f") return null;
+    fk = fontKey(m[2]);
+  }
+  if (TTF_SHX[fk] && doc.shx[TTF_SHX[fk]]) fk = TTF_SHX[fk];
+  if (!fk || !fk.endsWith(".shx")) return null;
+  // Missing SHX fonts are drawn with simplex, like AutoCAD's FONTALT.
+  const font = doc.shx[fk] ?? doc.shx["simplex.shx"];
+  if (!font) return null;
+  return { font, big: bk ? doc.shx[bk] : null, wf: sty?.wf ?? 1, obl: n.obl ?? sty?.obl ?? 0 };
+}
+
+/**
+ * Loads every SHX font the drawing's text styles use. fetchFont(name) gives
+ * the file bytes or null. Fonts that can't be found are listed in doc.missingFonts.
+ */
+export async function loadFonts(doc, fetchFont) {
+  const need = new Set(["simplex.shx"]);
+  const add = (f) => {
+    const k2 = fontKey(f);
+    if (k2.endsWith(".shx")) need.add(k2);
+    else if (TTF_SHX[k2]) need.add(TTF_SHX[k2]);
+    else if (/\.(ttf|otf)$/.test(k2)) need.add(k2);
+  };
+  for (const s of Object.values(doc.styles ?? {})) add(s.font), add(s.big);
+  const scan = (list) => {
+    for (const e of list)
+      if (e.type === "MTEXT" && e.text?.includes("\\"))
+        for (const m of e.text.matchAll(/\\F([^;|]+)/g)) add(m[1]);
+  };
+  scan(doc.entities);
+  for (const b of Object.values(doc.blocks ?? {})) scan(b.entities);
+  doc.shx = {};
+  doc.ttf = {};
+  doc.missingFonts = [];
+  await Promise.all(
+    [...need].map(async (name) => {
+      let font = null;
+      try {
+        const bytes = await fetchFont(name);
+        if (bytes && !name.endsWith(".shx")) {
+          // A TrueType font the user added: give it to the browser.
+          if (typeof FontFace !== "undefined") {
+            const fam = "sp-" + name.replace(/[^a-z0-9]/g, "-");
+            const face = new FontFace(fam, bytes);
+            await face.load();
+            document.fonts.add(face);
+            doc.ttf[name] = `"${fam}"`;
+          }
+          return;
+        }
+        font = bytes && parseShx(bytes);
+      } catch {}
+      if (font) doc.shx[name] = font;
+      else if (name.endsWith(".shx") && name !== "simplex.shx") doc.missingFonts.push(name);
+    }),
+  );
+}
+
 export function plainText(t) {
   if (t && typeof t === "object") t = t.text ?? t.value ?? "";
   return String(t ?? "")
@@ -512,10 +606,13 @@ export function flatten(doc, list = doc.entities) {
       const text = (str, p, h, rot, att, extra = {}) => {
         const s = plainText(str);
         if (!s.trim()) return;
+        if (shxText(str, s, p, h, rot, att, extra)) return;
         const c = Math.cos(rot),
           sn = Math.sin(rot);
+        const sty = doc.styles?.[n.st || "STANDARD"] ?? doc.styles?.STANDARD;
         const t = {
           color: C,
+          ...ttfFace(doc, fontKey(sty?.font) || "arial.ttf"),
           p: N(p),
           h: h * k,
           rot: Math.atan2(M[1] * c + M[3] * sn, M[0] * c + M[2] * sn),
@@ -527,6 +624,72 @@ export function flatten(doc, list = doc.entities) {
         L.texts.push(t);
         texts.push(t);
         snapK("ins", p);
+      };
+      // Text in an SHX font is drawn as lines, exactly like AutoCAD.
+      const shxText = (raw, s, p, h, rot, att, extra) => {
+        const f = textFont(doc, n, raw);
+        if (!f) return false;
+        const lines = s.split("\n"),
+          wf = (n.type === "MTEXT" ? f.wf : (extra.wf ?? f.wf)) || 1,
+          tanO = Math.tan(f.obl || 0),
+          gap = (n.ls || 1) * (5 / 3),
+          maxW = n.type === "MTEXT" && n.w > 0 ? n.w / h / wf : 0,
+          laid = [];
+        for (const line of lines) {
+          if (!maxW) {
+            laid.push(shxLine(line, f.font, f.big));
+            continue;
+          }
+          // Word wrap to the MTEXT box width.
+          let cur = "";
+          for (const word of line.split(" ")) {
+            const next = cur ? cur + " " + word : word;
+            if (cur && Math.abs(shxLine(next, f.font, f.big).width) > maxW) {
+              laid.push(shxLine(cur, f.font, f.big));
+              cur = word;
+            } else cur = next;
+          }
+          laid.push(shxLine(cur, f.font, f.big));
+        }
+        const row = Math.floor((att - 1) / 3),
+          col = (att - 1) % 3,
+          nl = laid.length;
+        let y0 =
+          n.type === "MTEXT"
+            ? row === 0
+              ? -1
+              : row === 1
+                ? ((nl - 1) * gap + 1) / 2 - 1
+                : (nl - 1) * gap
+            : row === 0
+              ? -1
+              : row === 1
+                ? -0.5
+                : 0;
+        const c = Math.cos(rot),
+          sn = Math.sin(rot),
+          savePat = pat;
+        pat = null;
+        for (let li2 = 0; li2 < nl; li2++) {
+          const { strokes, width } = laid[li2],
+            dx = (-width * col) / 2,
+            yy = y0 - li2 * gap;
+          for (const st of strokes) {
+            const pts = new Array(st.length / 2);
+            for (let j = 0; j < st.length; j += 2) {
+              const y = st[j + 1] + yy,
+                x = ((st[j] + dx) * wf + y * tanO) * h,
+                Y = y * h;
+              pts[j / 2] = { x: p.x + x * c - Y * sn, y: p.y + x * sn + Y * c };
+            }
+            line(pts, false, C, true);
+          }
+        }
+        pat = savePat;
+        const q = N(p);
+        texts.push({ color: C, p: q, h: h * k, rot: 0, str: s, att, layer: lname, vec: true });
+        snapK("ins", p);
+        return true;
       };
       for (n of ents) {
         lname = n.layer === "0" && pLayer ? pLayer : n.layer;

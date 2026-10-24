@@ -1207,7 +1207,8 @@ var st = 14,
               n.translate(m.x, m.y),
               n.rotate(-c.rot + a),
               (n.fillStyle = this.ink(c.color)),
-              (n.font = `${p}px "Segoe UI", Tahoma, sans-serif`);
+              // AutoCAD text height is the capital height, about 0.72 of the font size.
+              (n.font = `${c.fw ?? ""}${p / 0.72}px ${c.ff ?? '"Segoe UI", Tahoma, sans-serif'}`);
             let b = (c.att - 1) % 3,
               T = Math.floor((c.att - 1) / 3);
             (n.textAlign = b === 0 ? "left" : b === 1 ? "center" : "right"),
@@ -1216,7 +1217,7 @@ var st = 14,
               (n.direction = "ltr"),
               c.wf && c.wf !== 1 && n.scale(c.wf, 1),
               textLines(n, c).forEach((S, r) =>
-                n.fillText(S, 0, (r - (T === 2 ? textLines(n, c).length - 1 : T === 1 ? (textLines(n, c).length - 1) / 2 : 0)) * p * 1.35 * (c.ls || 1)),
+                n.fillText(S, 0, (r - (T === 2 ? textLines(n, c).length - 1 : T === 1 ? (textLines(n, c).length - 1) / 2 : 0)) * p * (5 / 3) * (c.ls || 1)),
               ),
               n.restore();
           }
@@ -1489,7 +1490,7 @@ function textLines(ctx, t) {
   let lines = t.str.split("\n");
   if (t.w > 0 && t.h > 0) {
     let f = ctx.font;
-    ctx.font = '100px "Segoe UI", Tahoma, sans-serif';
+    ctx.font = `${t.fw ?? ""}${100 / 0.72}px ${t.ff ?? '"Segoe UI", Tahoma, sans-serif'}`;
     let max = (t.w / t.h) * 100 * 1.02,
       out = [];
     for (let l of lines) {
