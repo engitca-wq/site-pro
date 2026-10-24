@@ -38,6 +38,19 @@ html, body { margin: 0; height: 100%; overflow: hidden; font-family: Tajawal, "S
 .tool.back { min-width: 40px; color: var(--tx2); }
 .cat span, .tool span { white-space: nowrap; }
 #hint { position: absolute; top: calc(62px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 24px); background: rgba(20,24,30,.85); color: #fff; padding: 6px 12px; border-radius: 999px; font-size: 13px; text-align: center; z-index: 2; pointer-events: none; }
+#drawbar { position: absolute; top: calc(60px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); background: var(--dk); color: var(--tx); border-radius: 12px; padding: 6px 10px; z-index: 3; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; max-width: calc(100% - 20px); box-shadow: 0 4px 18px rgba(0,0,0,.35); font: 13px Tajawal, sans-serif; }
+#drawbar[hidden] { display: none; }
+body.dbar #hint, body.dbar #notice { top: calc(108px + env(safe-area-inset-top)); }
+body.dbar #toast { top: calc(150px + env(safe-area-inset-top)); }
+@media (max-width: 600px) {
+  #drawbar { flex-wrap: nowrap; gap: 6px; padding: 5px 6px; }
+  #drawbar span { display: none; }
+  #drawbar select { max-width: 30vw; padding: 5px 4px; font-size: 12px; }
+  body.dbar #hint, body.dbar #notice { top: calc(100px + env(safe-area-inset-top)); }
+}
+#drawbar label { display: flex; align-items: center; gap: 6px; color: var(--tx2); }
+#drawbar select { background: var(--dk3); color: var(--tx); border: 0; border-radius: 8px; padding: 5px 8px; font: 700 13px Tajawal, sans-serif; max-width: 160px; }
+#drawbar i { width: 14px; height: 14px; border-radius: 4px; display: inline-block; border: 1px solid #0006; }
 #osnap { position: absolute; top: 60px; left: 10px; background: var(--dk); color: var(--tx); border-radius: 12px; padding: 10px 12px; z-index: 4; display: flex; flex-direction: column; gap: 6px; font: 14px Tajawal, sans-serif; box-shadow: 0 4px 18px rgba(0,0,0,.35); }
 #osnap[hidden] { display: none; }
 #osnap label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
@@ -117,6 +130,7 @@ input[type=range] { width: 100%; }
 <div id="loading"><div><i></i><span>بيفتح الملف...</span></div></div>
 <div id="error" hidden></div>
 <div id="osnap" hidden></div>
+<div id="drawbar" hidden></div>
 <div id="notice" hidden><span></span><button type="button" aria-label="قفل">×</button></div>
 <script>
 // A note about parts of the drawing that could not be shown; stays until closed.

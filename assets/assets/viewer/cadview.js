@@ -108,7 +108,7 @@ function O(i, s, t, e, n = {}) {
   i.save(),
     (i.strokeStyle = h),
     (i.fillStyle = h),
-    (i.lineWidth = n.width ?? 2),
+    (i.lineWidth = n.width ?? (s.lw ? Math.max(1, Math.min(12, (2 * s.lw) / 25)) : 2)),
     (i.lineJoin = i.lineCap = "round");
   let l = (r, f) => {
       i.beginPath(),
