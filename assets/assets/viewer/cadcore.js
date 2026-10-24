@@ -371,10 +371,13 @@ export function flatten(doc, list = doc.entities) {
   };
   const LT = doc.ltypes ?? {},
     ltscale = doc.ltscale || 1;
+  const ents_ = [];
   let box = null,
     insIdx = -1,
     segs = new Float64Array(1 << 16),
+    eids = new Int32Array(1 << 13),
     nseg = 0,
+    curEnt = -1,
     tick = 0;
   const seg = (a, b, li) => {
     if (nseg + 6 > segs.length) {
@@ -382,6 +385,12 @@ export function flatten(doc, list = doc.entities) {
       g.set(segs);
       segs = g;
     }
+    if (nseg / 6 >= eids.length) {
+      const h = new Int32Array(eids.length * 2);
+      h.set(eids);
+      eids = h;
+    }
+    eids[nseg / 6] = curEnt;
     segs[nseg++] = a.x;
     segs[nseg++] = a.y;
     segs[nseg++] = b.x;
@@ -526,6 +535,11 @@ export function flatten(doc, list = doc.entities) {
               : n.ci === 256 || n.ci === undefined
                 ? L.color
                 : aci(n.ci);
+        // Top-level entity number, so a tap can select the whole object.
+        if (depth === 0) {
+          curEnt = ents_.length;
+          ents_.push({ type: n.type, layer: lname, color: C, name: n.name });
+        }
         ltName =
           n.lt === "BYBLOCK"
             ? (pLt ?? "CONTINUOUS")
@@ -826,6 +840,8 @@ export function flatten(doc, list = doc.entities) {
     inserts,
     texts,
     segs: segs.subarray(0, nseg),
+    eids: eids.subarray(0, nseg / 6),
+    ents: ents_,
   };
 }
 

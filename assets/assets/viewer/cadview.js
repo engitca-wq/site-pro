@@ -554,6 +554,7 @@ var st = 14,
       return this.space === 0;
     }
     setSpace(s) {
+      this.entSel && ((this.entSel = null), this.opts.onSelectEntity?.(null));
       let t = this.spaces[s];
       if (!t.flat && ((t.flat = L(this.doc, t.entities)), Q(t.flat), s > 0)) {
         for (let [e, n] of Object.entries(t.flat.layers))
@@ -778,6 +779,63 @@ var st = 14,
       }
       return a < 0 ? null : { layer: e.layerNames[n[a + 4]], insert: n[a + 5] };
     }
+    selectEntityAt(s, t) {
+      let f = this.flat,
+        n = f.segs,
+        o = this.toWorld(s, t),
+        h = 12 / this.scale,
+        best = -1,
+        bd = h;
+      for (let d of f.segIndex.query(o.x - h, o.y - h, o.x + h, o.y + h)) {
+        let c = d * 6;
+        if (f.layers[f.layerNames[n[c + 4]]]?.off) continue;
+        let p = B(o.x, o.y, { x: n[c], y: n[c + 1] }, { x: n[c + 2], y: n[c + 3] });
+        p < bd && ((bd = p), (best = c));
+      }
+      if (best < 0 || (this.entSel && this.entSel.at === best)) {
+        // Tap on empty space (or the same object again) clears the selection.
+        this.entSel = null;
+        this.opts.onSelectEntity?.(null);
+        return this.draw();
+      }
+      let ins = n[best + 5],
+        id = f.eids?.[best / 6] ?? -1,
+        segs = [],
+        len = 0,
+        total = n.length / 6;
+      for (let j = 0; j < total; j++) {
+        let c = j * 6;
+        if (ins >= 0 ? n[c + 5] !== ins : f.eids[j] !== id) continue;
+        len += Math.hypot(n[c + 2] - n[c], n[c + 3] - n[c + 1]);
+        if (segs.length < 240000) segs.push(n[c], n[c + 1], n[c + 2], n[c + 3]);
+      }
+      let info;
+      if (ins >= 0) {
+        let I = f.inserts[ins];
+        info = {
+          kind: "block",
+          name: I.name,
+          layer: I.layer,
+          count: f.inserts.filter((x) => x.name === I.name).length,
+        };
+      } else {
+        let E = f.ents?.[id];
+        info = {
+          kind: "entity",
+          type: E?.type ?? "",
+          name: E?.name,
+          layer: E?.layer ?? f.layerNames[n[best + 4]],
+          color: E?.color,
+          lengthM: len * this.opts.unitToM(),
+        };
+      }
+      this.entSel = { at: best, segs, info };
+      this.opts.onSelectEntity?.(info);
+      this.draw();
+    }
+    clearEntitySel() {
+      this.entSel && ((this.entSel = null), this.opts.onSelectEntity?.(null), this.draw());
+    }
     pickCircle(s, t) {
       let e = this.toWorld(s, t),
         n = 14 / this.scale,
@@ -823,6 +881,7 @@ var st = 14,
         (this.snapPt = null),
         (this.cursor = null),
         s !== "select" && (this.selected = null),
+        s !== "select" && s !== "pan" && this.clearEntitySel(),
         this.pending(),
         this.draw();
     }
@@ -830,11 +889,17 @@ var st = 14,
       let e = this.tool;
       if (e === "pan" || e === "select") {
         let a = this.pickMark(s, t);
-        e === "select"
-          ? ((this.selected = a), this.opts.onSelectMark?.(a), this.draw())
-          : a &&
-            ["pin", "image", "audio"].includes(a.kind) &&
-            this.opts.onTapMark(a);
+        if (a && e === "pan" && ["pin", "image", "audio"].includes(a.kind))
+          return this.opts.onTapMark(a);
+        if (a && e === "select") {
+          this.entSel = null;
+          this.selected = a;
+          this.opts.onSelectMark?.(a);
+          return this.draw();
+        }
+        // Otherwise select the drawing object (line, polyline, text, block...) under the finger.
+        this.selected = null;
+        this.selectEntityAt(s, t);
         return;
       }
       if (e === "layoff" || e === "isolate") {
@@ -1205,6 +1270,17 @@ var st = 14,
       let s = this.ctx;
       s.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
       let t = (o) => this.toScreen(o);
+      if (this.entSel) {
+        let g = this.entSel.segs;
+        s.beginPath();
+        for (let j = 0; j < g.length; j += 4) {
+          let a = t({ x: g[j], y: g[j + 1] }),
+            b = t({ x: g[j + 2], y: g[j + 3] });
+          s.moveTo(a.x, a.y), s.lineTo(b.x, b.y);
+        }
+        (s.strokeStyle = "rgba(76,214,255,.35)"), (s.lineWidth = 7), (s.lineCap = "round"), s.stroke();
+        (s.strokeStyle = "#4cd6ff"), (s.lineWidth = 2), s.stroke();
+      }
       if (this.highlight) {
         (s.strokeStyle = "#4cd6ff"), (s.lineWidth = 2);
         for (let o of this.highlight) {
