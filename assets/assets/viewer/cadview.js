@@ -517,9 +517,20 @@ function B(i, s, t, e) {
     a = h ? Math.max(0, Math.min(1, ((i - t.x) * n + (s - t.y) * o) / h)) : 0;
   return Math.hypot(i - (t.x + a * n), s - (t.y + a * o));
 }
+var SNAP_KINDS = ["end", "mid", "cen", "quad", "ins", "node", "perp", "ext", "near"],
+  SNAP_DEFAULT_OFF = [],
+  SNAP_AR = { end: "نهاية", mid: "منتصف", cen: "مركز", quad: "ربع دايرة", ins: "نقطة إدراج", node: "نقطة", perp: "عمودي", ext: "امتداد", near: "أقرب نقطة" };
 var st = 14,
   K = class {
     constructor(s, t, e) {
+      try {
+        this.ortho = localStorage.getItem("sitepro.ortho") === "1";
+      } catch {}
+      this.osnap = new Set(SNAP_KINDS.filter((k) => SNAP_DEFAULT_OFF.indexOf(k) < 0));
+      try {
+        let v = localStorage.getItem("sitepro.osnap");
+        v !== null && (this.osnap = new Set(v.split(",").filter(Boolean)));
+      } catch {}
       (this.doc = t),
         (this.opts = e),
         (this.canvas = document.createElement("canvas")),
@@ -734,30 +745,79 @@ var st = 14,
     hover(s, t) {
       this.needsPoints() &&
         ((this.snapPt = this.nearestSnap(s, t)),
-        (this.cursor = this.snapPt ?? this.toWorld(s, t)),
+        (this.cursor = this.orthoFix(this.snapPt, s, t)),
+        this.cursor !== this.snapPt && (this.snapPt = null),
         this.draw());
     }
+    // Object snaps, like AutoCAD OSNAP: point snaps first (end, mid, center...),
+    // then perpendicular from the last point, extension, and nearest on a line.
     nearestSnap(s, t) {
       let e = this.flat,
         n = this.toWorld(s, t),
         o = st / this.scale,
-        h = Math.ceil(o / e.cell);
-      if (h > 40) return null;
-      let a = Math.floor(n.x / e.cell),
-        l = Math.floor(n.y / e.cell),
+        on = this.osnap,
+        h = Math.ceil(o / e.cell),
         d = null,
         c = o;
-      for (let p = -h; p <= h; p++)
-        for (let m = -h; m <= h; m++)
-          for (let b of e.snapGrid.get(a + p + "," + (l + m)) ?? []) {
-            if (e.layers[e.layerNames[b.l]]?.off) continue;
-            let T = Math.hypot(b.x - n.x, b.y - n.y);
-            T < c && ((c = T), (d = b));
+      if (on.size === 0) return null;
+      if (h <= 40) {
+        let a = Math.floor(n.x / e.cell),
+          l = Math.floor(n.y / e.cell);
+        for (let p = -h; p <= h; p++)
+          for (let m = -h; m <= h; m++)
+            for (let b of e.snapGrid.get(a + p + "," + (l + m)) ?? []) {
+              if (!on.has(b.k ?? "end") || e.layers[e.layerNames[b.l]]?.off) continue;
+              let T = Math.hypot(b.x - n.x, b.y - n.y);
+              T < c && ((c = T), (d = b));
+            }
+      }
+      if (d) return { x: d.x, y: d.y, k: d.k ?? "end" };
+      let g = e.segs,
+        last = this.points[this.points.length - 1],
+        R = on.has("ext") ? o * 12 : o,
+        perp = null,
+        ext = null,
+        near = null,
+        dp = o,
+        de = o,
+        dn = o;
+      for (let q of e.segIndex.query(n.x - R, n.y - R, n.x + R, n.y + R)) {
+        let i = q * 6;
+        if (e.layers[e.layerNames[g[i + 4]]]?.off) continue;
+        let ax = g[i], ay = g[i + 1], bx = g[i + 2], by = g[i + 3],
+          vx = bx - ax, vy = by - ay, L2 = vx * vx + vy * vy;
+        if (!L2) continue;
+        let u = ((n.x - ax) * vx + (n.y - ay) * vy) / L2,
+          px = ax + u * vx, py = ay + u * vy,
+          off = Math.hypot(n.x - px, n.y - py);
+        if (u >= 0 && u <= 1) {
+          if (on.has("near") && off < dn) (dn = off), (near = { x: px, y: py, k: "near" });
+          if (on.has("perp") && last) {
+            let w = ((last.x - ax) * vx + (last.y - ay) * vy) / L2;
+            if (w >= 0 && w <= 1) {
+              let fx = ax + w * vx, fy = ay + w * vy, df = Math.hypot(n.x - fx, n.y - fy);
+              df < dp && Math.hypot(fx - last.x, fy - last.y) > o && ((dp = df), (perp = { x: fx, y: fy, k: "perp" }));
+            }
           }
-      return d ? { x: d.x, y: d.y } : null;
+        } else if (on.has("ext") && off < de && L2 > 4 * o * o) {
+          // Beyond an end of a real (not tessellated) line: snap onto its extension.
+          let from = u < 0 ? { x: ax, y: ay } : { x: bx, y: by };
+          Math.hypot(px - from.x, py - from.y) < R && ((de = off), (ext = { x: px, y: py, k: "ext", from }));
+        }
+      }
+      return perp ?? ext ?? near;
     }
     snapOr(s, t) {
-      return this.nearestSnap(s, t) || this.toWorld(s, t);
+      return this.orthoFix(this.nearestSnap(s, t), s, t);
+    }
+    // Ortho (F8): from the last point, only horizontal or vertical. An exact
+    // object snap (end, mid, center...) still wins, like in AutoCAD.
+    orthoFix(sp, s, t) {
+      let last = this.points[this.points.length - 1];
+      if (!this.ortho || !last) return sp ?? this.toWorld(s, t);
+      if (sp && sp.k !== "near" && sp.k !== "ext") return sp;
+      let w = this.toWorld(s, t);
+      return Math.abs(w.x - last.x) >= Math.abs(w.y - last.y) ? { x: w.x, y: last.y } : { x: last.x, y: w.y };
     }
     pickSegment(s, t) {
       let e = this.flat,
@@ -1172,17 +1232,18 @@ var st = 14,
         let same = snap.cx === this.cx && snap.cy === this.cy && snap.scale === this.scale;
         // (Canvas work is mostly done after paint() returns, so size counts too.)
         if (same || this._cost > 40 || (this.flat?.size ?? 0) > 150000) {
-          this.blit(snap);
+          this.blit(snap, !same);
           this.paintOverlay();
           if (!same) {
             clearTimeout(this._full);
-            this._full = setTimeout(() => ((this._snap = null), this.draw()), 220);
+            this._full = setTimeout(() => ((this._snap = null), this.draw(), this.buildOverview()), 150);
           }
           return;
         }
       }
       this.paintDrawing();
       this._cost = performance.now() - now;
+      this._ov?.key !== this.ovKey() && (clearTimeout(this._ovT), (this._ovT = setTimeout(() => this.buildOverview(), 600)));
       let c = (this._snapCanvas ??= document.createElement("canvas"));
       (c.width !== this.canvas.width || c.height !== this.canvas.height) &&
         ((c.width = this.canvas.width), (c.height = this.canvas.height)),
@@ -1201,18 +1262,51 @@ var st = 14,
       }
       return k;
     }
-    blit(snap) {
+    blit(snap, moving) {
       let s = this.ctx,
         e = this.dpr,
-        r = this.scale / snap.scale,
-        tx = this.w / 2 + (snap.cx - this.cx) * this.scale - (this.w / 2) * r,
-        ty = this.h / 2 - (snap.cy - this.cy) * this.scale - (this.h / 2) * r;
+        put = (S, W, H) => {
+          let r = this.scale / S.scale,
+            tx = this.w / 2 + (S.cx - this.cx) * this.scale - (W / 2) * r,
+            ty = this.h / 2 - (S.cy - this.cy) * this.scale - (H / 2) * r;
+          s.setTransform(e * r, 0, 0, e * r, e * tx, e * ty), s.drawImage(S.canvas, 0, 0, W, H);
+        };
       s.setTransform(e, 0, 0, e, 0, 0),
         (s.fillStyle = this.light ? "#ffffff" : "#1d2127"),
-        s.fillRect(0, 0, this.w, this.h),
-        s.setTransform(e * r, 0, 0, e * r, e * tx, e * ty),
-        s.drawImage(snap.canvas, 0, 0, this.w, this.h),
-        s.setTransform(e, 0, 0, e, 0, 0);
+        s.fillRect(0, 0, this.w, this.h);
+      // While moving, the whole-drawing picture fills the parts the last frame did not cover.
+      let ov = this._ov;
+      moving && ov && ov.key === this.ovKey() && put(ov, ov.W, ov.H);
+      put(snap, this.w, this.h), s.setTransform(e, 0, 0, e, 0, 0);
+    }
+    ovKey() {
+      let k = this.frameKey().split("|");
+      return (k[1] = k[2] = ""), k.join("|");
+    }
+    // A one-off picture of the whole drawing, so panning and zooming out never show empty areas.
+    buildOverview() {
+      let f = this.flat;
+      if (!f || (f.size ?? 0) <= 150000 || this._ov?.key === this.ovKey()) return;
+      let v = f.view ?? f.bbox,
+        bw = v.maxX - v.minX,
+        bh = v.maxY - v.minY;
+      if (!(bw > 0 && bh > 0)) return;
+      let M = 2048,
+        sc = M / Math.max(bw, bh),
+        W = Math.max(1, Math.round(bw * sc)),
+        H = Math.max(1, Math.round(bh * sc)),
+        c = (this._ov?.canvas ?? document.createElement("canvas"));
+      (c.width = W), (c.height = H);
+      let keep = [this.ctx, this.w, this.h, this.dpr, this.cx, this.cy, this.scale];
+      try {
+        (this.ctx = c.getContext("2d")), (this.w = W), (this.h = H), (this.dpr = 1),
+          (this.cx = (v.minX + v.maxX) / 2), (this.cy = (v.minY + v.maxY) / 2), (this.scale = sc);
+        this.paintDrawing();
+        this._ov = { key: null, canvas: c, W, H, cx: this.cx, cy: this.cy, scale: sc };
+      } finally {
+        [this.ctx, this.w, this.h, this.dpr, this.cx, this.cy, this.scale] = keep;
+      }
+      this._ov.key = this.ovKey();
     }
     paintDrawing() {
       let s = this.ctx,
@@ -1353,12 +1447,7 @@ var st = 14,
               { color: E(this.color) },
             );
       }
-      if (this.snapPt) {
-        let o = t(this.snapPt);
-        (s.strokeStyle = "#4cd6ff"),
-          (s.lineWidth = 2),
-          s.strokeRect(o.x - 6, o.y - 6, 12, 12);
-      }
+      if (this.snapPt) snapMarker(s, this.snapPt, t);
       this.flashText &&
         R(
           s,
@@ -1369,6 +1458,31 @@ var st = 14,
         );
     }
   };
+/** AutoCAD-style snap glyph plus its name. */
+function snapMarker(s, sp, t) {
+  let o = t(sp),
+    x = o.x,
+    y = o.y,
+    k = sp.k ?? "end";
+  s.save(), (s.strokeStyle = "#4cd6ff"), (s.lineWidth = 2), s.beginPath();
+  if (k === "ext" && sp.from) {
+    let f = t(sp.from);
+    s.setLineDash([3, 4]), s.moveTo(f.x, f.y), s.lineTo(x, y), s.stroke(), s.setLineDash([]), s.beginPath();
+  }
+  switch (k) {
+    case "mid": s.moveTo(x, y - 7), s.lineTo(x + 7, y + 5), s.lineTo(x - 7, y + 5), s.closePath(); break;
+    case "cen": s.arc(x, y, 7, 0, Math.PI * 2); break;
+    case "quad": s.moveTo(x, y - 7), s.lineTo(x + 7, y), s.lineTo(x, y + 7), s.lineTo(x - 7, y), s.closePath(); break;
+    case "ins": s.rect(x - 6, y - 6, 12, 12), s.moveTo(x - 6, y), s.lineTo(x + 6, y); break;
+    case "node": s.arc(x, y, 6, 0, Math.PI * 2), s.moveTo(x - 4, y - 4), s.lineTo(x + 4, y + 4), s.moveTo(x + 4, y - 4), s.lineTo(x - 4, y + 4); break;
+    case "perp": s.moveTo(x - 7, y + 6), s.lineTo(x + 7, y + 6), s.moveTo(x - 7, y + 6), s.lineTo(x - 7, y - 7), s.moveTo(x - 7, y), s.lineTo(x, y), s.lineTo(x, y + 6); break;
+    case "ext": s.moveTo(x - 6, y), s.lineTo(x + 6, y), s.moveTo(x, y - 6), s.lineTo(x, y + 6); break;
+    case "near": s.moveTo(x - 6, y - 6), s.lineTo(x + 6, y - 6), s.lineTo(x - 6, y + 6), s.lineTo(x + 6, y + 6), s.closePath(); break;
+    default: s.rect(x - 6, y - 6, 12, 12);
+  }
+  s.stroke(), (s.font = "600 11px Tajawal, sans-serif"), (s.fillStyle = "#4cd6ff"), (s.textAlign = "left"), s.fillText(SNAP_AR[k] ?? "", x + 10, y - 10), s.restore();
+}
+export { SNAP_KINDS, SNAP_AR };
 /** MTEXT lines, word-wrapped to the box width once (in text-height units). */
 function textLines(ctx, t) {
   if (t._lines) return t._lines;

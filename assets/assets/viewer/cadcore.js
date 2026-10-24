@@ -478,10 +478,17 @@ export function flatten(doc, list = doc.entities) {
       for (let i = 1; i < w.length; i++) seg(w[i - 1], w[i], li);
     };
     {
+      // k: end, mid, cen, quad, ins, node (the snap modes the user can switch).
+      let SK = "end";
       const snap = (...ps) => {
-        for (const p of ps) snaps.push({ ...N(p), l: li });
+        for (const p of ps) snaps.push({ ...N(p), l: li, k: SK });
       };
-      const snapT = (p) => snaps.push({ ...T(p), l: li });
+      const snapT = (p, k = "cen") => snaps.push({ ...T(p), l: li, k });
+      const snapK = (k, ...ps) => {
+        SK = k;
+        snap(...ps);
+        SK = "end";
+      };
       const fill = (loops, alpha) =>
         L.fills.push({ color: C, alpha, loops: loops.map((l) => l.map(N)) });
       const arrow = (tip, from, size) => {
@@ -519,7 +526,7 @@ export function flatten(doc, list = doc.entities) {
         };
         L.texts.push(t);
         texts.push(t);
-        snap(p);
+        snapK("ins", p);
       };
       for (n of ents) {
         lname = n.layer === "0" && pLayer ? pLayer : n.layer;
@@ -558,7 +565,8 @@ export function flatten(doc, list = doc.entities) {
         switch (n.type) {
           case "LINE":
             line(n.pts);
-            snap(n.pts[0], n.pts[1], {
+            snap(n.pts[0], n.pts[1]);
+            snapK("mid", {
               x: (n.pts[0].x + n.pts[1].x) / 2,
               y: (n.pts[0].y + n.pts[1].y) / 2,
             });
@@ -567,7 +575,7 @@ export function flatten(doc, list = doc.entities) {
             line(polyPoints(n.pts, n.closed));
             snap(...n.pts);
             for (let i = 1; i < n.pts.length; i++)
-              snap({
+              snapK("mid", {
                 x: (n.pts[i].x + n.pts[i - 1].x) / 2,
                 y: (n.pts[i].y + n.pts[i - 1].y) / 2,
               });
@@ -576,7 +584,8 @@ export function flatten(doc, list = doc.entities) {
           case "CIRCLE":
             line(arcPoints(n.c, n.r, 0, Math.PI * 2), false, C, true);
             snapT(n.c);
-            snap(
+            snapK(
+              "quad",
               { x: n.c.x + n.r, y: n.c.y },
               { x: n.c.x - n.r, y: n.c.y },
               { x: n.c.x, y: n.c.y + n.r },
@@ -587,7 +596,8 @@ export function flatten(doc, list = doc.entities) {
           case "ARC": {
             const pts = arcPoints(n.c, n.r, n.a0, n.a1);
             snapT(n.c);
-            snap(pts[0], pts[pts.length - 1], pts[pts.length >> 1]);
+            snap(pts[0], pts[pts.length - 1]);
+            snapK("mid", pts[pts.length >> 1]);
             line(pts, false, C, true);
             circles.push({ c: T(n.c), r: n.r * k, layer: li, arc: true });
             break;
@@ -611,7 +621,7 @@ export function flatten(doc, list = doc.entities) {
               });
             }
             line(pts, false, C, true);
-            snap(n.c);
+            snapT(n.c);
             break;
           }
           case "SPLINE": {
@@ -674,7 +684,7 @@ export function flatten(doc, list = doc.entities) {
             });
             break;
           case "POINT":
-            snap(n.p);
+            snapK("node", n.p);
             break;
           case "XLINE":
           case "RAY":
@@ -794,7 +804,7 @@ export function flatten(doc, list = doc.entities) {
                 }
               {
                 const o = n.ocs ?? [1, 0, 0, 1];
-                snapT({ x: o[0] * n.p.x + o[2] * n.p.y, y: o[1] * n.p.x + o[3] * n.p.y });
+                snapT({ x: o[0] * n.p.x + o[2] * n.p.y, y: o[1] * n.p.x + o[3] * n.p.y }, "ins");
               }
               if (n.attribs?.length)
                 walk(n.attribs, M, lname, C, ltName, lw, depth + 1);

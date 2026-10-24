@@ -38,6 +38,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; font-family: Tajawal, "S
 .tool.back { min-width: 40px; color: var(--tx2); }
 .cat span, .tool span { white-space: nowrap; }
 #hint { position: absolute; top: calc(62px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 24px); background: rgba(20,24,30,.85); color: #fff; padding: 6px 12px; border-radius: 999px; font-size: 13px; text-align: center; z-index: 2; pointer-events: none; }
+#osnap { position: absolute; top: 60px; left: 10px; background: var(--dk); color: var(--tx); border-radius: 12px; padding: 10px 12px; z-index: 4; display: flex; flex-direction: column; gap: 6px; font: 14px Tajawal, sans-serif; box-shadow: 0 4px 18px rgba(0,0,0,.35); }
+#osnap[hidden] { display: none; }
+#osnap label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+#osnap .row { display: flex; gap: 6px; }
+#osnap button { border: 0; border-radius: 8px; padding: 5px 10px; background: var(--dk3); color: var(--tx); font: 700 13px Tajawal, sans-serif; cursor: pointer; }
 #pending, #selbar { position: absolute; bottom: calc(var(--dock, 0px) + 12px); left: 50%; transform: translateX(-50%); background: var(--dk); color: var(--tx); border-radius: 12px; padding: 8px 10px; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 18px rgba(0,0,0,.35); white-space: nowrap; z-index: 3; max-width: calc(100% - 20px); }
 #pvalue { font-weight: 700; font-size: 17px; color: #ffb340; min-width: 50px; }
 #pcount, #seltext { color: var(--tx2); font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
@@ -111,6 +116,7 @@ input[type=range] { width: 100%; }
 <div id="ask" hidden><form onsubmit="return false"><label id="ask-title" for="ask-input"></label><input id="ask-input" autocomplete="off"><div class="btns"><button id="ask-ok" type="button">تمام</button><button id="ask-cancel" type="button">إلغاء</button></div></form></div>
 <div id="loading"><div><i></i><span>بيفتح الملف...</span></div></div>
 <div id="error" hidden></div>
+<div id="osnap" hidden></div>
 <div id="notice" hidden><span></span><button type="button" aria-label="قفل">×</button></div>
 <script>
 // A note about parts of the drawing that could not be shown; stays until closed.
